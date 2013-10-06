@@ -8,32 +8,30 @@ chart implementation.
 dc.colorChart = function(_chart) {
     var _colors = d3.scale.category20c();
 
-    var _colorDomain = [0, _colors.range().length];
+    var _colorAccessor = function(d, i) { return i; };
+
+    var _elasticColor = false;
 
     var _colorCalculator = function(value) {
-        var domain = _colorDomain;
-        if (typeof _colorDomain === 'function')
-            domain = _colorDomain.call(_chart);
-        var minValue = domain[0];
-        var maxValue = domain[1];
-
-        if (isNaN(value)) value = 0;
-        if (!dc.utils.isNumber(maxValue)) return _colors(value);
-
-        var colorsLength = _chart.colors().range().length;
-        var denominator = (maxValue - minValue) / colorsLength;
-        var colorValue = Math.abs(Math.min(colorsLength - 1, Math.round((value - minValue) / denominator)));
-        //var colorValue = Math.abs(Math.round((value - minValue) / denominator)) % colorsLength;
-        return _chart.colors()(colorValue);
+        if (_elasticColor) {
+            var newDomain = (function() {
+                return [dc.utils.groupMin(this.group(), this.valueAccessor()),
+                        dc.utils.groupMax(this.group(), this.valueAccessor())];
+                }).call(_chart);
+            _colors.domain(newDomain);
+        }
+        return _colors(value);
     };
 
-    var _colorAccessor = function(d, i){return i;};
-
     /**
-    #### .colors([colorScale or colorArray])
+    #### .colors([colorScaleType or colorScale or colorArray])
     Retrieve current color scale or set a new color scale. This function accepts both d3 color scale and arbitrary color
     array. By default d3.scale.category20c() is used.
+    colorScaleType: is a convenience argument for switching between varying color scales.
     ```js
+    // color scale type
+    chart.colors("linear");
+    chart.colors("ordinal");
     // color scale
     chart.colors(d3.scale.category20b());
     // arbitrary color array
@@ -44,30 +42,18 @@ dc.colorChart = function(_chart) {
     _chart.colors = function(_) {
         if (!arguments.length) return _colors;
 
-        if (_ instanceof Array) {
+        if (_ === "ordinal") {
+            _colors = d3.scale.category20c();
+        } else if (_ === "linear") {
+            _colors = d3.scale.linear()
+                                .range(["hsl(62,100%,90%)", "hsl(228,30%,20%)"])
+                                .interpolate(d3.interpolateHcl);
+        } else if (_ instanceof Array) {
             _colors = d3.scale.ordinal().range(_);
-            var domain = [];
-            for(var i = 0; i < _.length; ++i){
-                domain.push(i);
-            }
-            _colors.domain(domain);
         } else {
             _colors = _;
         }
-
-        _colorDomain = [0, _colors.range().length];
-
         return _chart;
-    };
-
-    _chart.colorCalculator = function(_){
-        if(!arguments.length) return _colorCalculator;
-        _colorCalculator = _;
-        return _chart;
-    };
-
-    _chart.getColor = function(d, i){
-        return _colorCalculator(_colorAccessor(d, i));
     };
 
     /**
@@ -90,27 +76,23 @@ dc.colorChart = function(_chart) {
     };
 
     /**
-    #### .colorDomain([domain])
-    Set or get the current domain for the color mapping function. This allows user to provide a custom domain for the mapping
-    function used to map the return value of the colorAccessor function to the target color range calculated based on the
-    color scale. You value can either be an array with the start and end of the range or a function returning an array. Functions
-    are passed the chart in their `this` context.
-    ```js
-    // custom domain for month of year
-    chart.colorDomain([0, 11])
-    // custom domain for day of year
-    chart.colorDomain([0, 364])
-    // custom domain function that scales with the group value range
-    chart.colorDomain(function() {
-        [dc.utils.groupMin(this.group(), this.valueAccessor()),
-         dc.utils.groupMax(this.group(), this.valueAccessor())];
-    });
-    ```
+    #### .elasticColor([boolean])
+    get or set whether or not the color scales with the available values.
 
     **/
-    _chart.colorDomain = function(_){
-        if(!arguments.length) return _colorDomain;
-        _colorDomain = _;
+    _chart.elasticColor = function(_){
+        if(!arguments.length) return _elasticColor;
+        _elasticColor = _;
+        return _chart;
+    };
+
+    _chart.getColor = function(d, i){
+        return _colorCalculator(_colorAccessor(d, i));
+    };
+
+    _chart.colorCalculator = function(_){
+        if(!arguments.length) return _colorCalculator;
+        _colorCalculator = _;
         return _chart;
     };
 
